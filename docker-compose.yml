@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: cyberxchange-app
+    restart: unless-stopped
+    environment:
+      DB_NAME: /app/data/CyberXchange.db
+      DISPLAY: ${DISPLAY:-host.docker.internal:0.0}
+    volumes:
+      - app_data:/app/data
+      - .:/app
+    working_dir: /app
+    command: python main.py
+
+volumes:
+  app_data:
