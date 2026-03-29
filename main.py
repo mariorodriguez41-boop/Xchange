@@ -86,6 +86,13 @@ OPENAI_VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4.1-mini")
 OPENAI_LOOKUP_MODEL = os.getenv("OPENAI_SEARCH_MODEL", OPENAI_VISION_MODEL)
 OPENAI_API_KEY_PLACEHOLDER = "your_openai_api_key_here"
 AI_BACKEND_URL = os.getenv("AI_BACKEND_URL", "http://127.0.0.1:8765/price-lookup")
+LISTING_STATUSES = ("active", "pending_trade", "traded", "cancelled")
+LISTING_STATUS_LABELS = {
+    "active": "Active",
+    "pending_trade": "Pending Trade",
+    "traded": "Traded",
+    "cancelled": "Cancelled",
+}
 
 # -------------------------------------------------
 # Neon theme colors
@@ -153,6 +160,7 @@ def init_db() -> None:
         )
         """
     )
+    ensure_column(cur, "items", "status", "TEXT NOT NULL DEFAULT 'active'")
 
     # Local inbox/messages table
     cur.execute(
@@ -343,8 +351,8 @@ def save_item(
                 """
                 INSERT INTO items (
                     user_id, title, category, condition, description,
-                    estimated_value, desired_trade_value, photo_path, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    estimated_value, desired_trade_value, photo_path, created_at, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
                 """,
                 params,
             )
@@ -369,7 +377,7 @@ def get_user_items(user_id: int) -> list[tuple]:
     cur.execute(
         """
         SELECT id, title, category, condition, description,
-               estimated_value, desired_trade_value, photo_path, created_at
+               estimated_value, desired_trade_value, photo_path, created_at, status
         FROM items
         WHERE user_id = ?
         ORDER BY id DESC
@@ -389,10 +397,11 @@ def get_all_other_items(user_id: int) -> list[tuple]:
         """
         SELECT i.id, i.user_id, u.username, i.title, i.category, i.condition,
                i.description, i.estimated_value, i.desired_trade_value,
-               i.photo_path, i.created_at
+               i.photo_path, i.created_at, i.status
         FROM items i
         JOIN users u ON i.user_id = u.id
         WHERE i.user_id != ?
+          AND i.status = 'active'
         ORDER BY i.id DESC
         """,
         (user_id,),
@@ -412,10 +421,11 @@ def get_other_items_by_category(user_id: int, category: str) -> list[tuple]:
             """
             SELECT i.id, i.user_id, u.username, i.title, i.category, i.condition,
                    i.description, i.estimated_value, i.desired_trade_value,
-                   i.photo_path, i.created_at
+                   i.photo_path, i.created_at, i.status
             FROM items i
             JOIN users u ON i.user_id = u.id
             WHERE i.user_id != ?
+              AND i.status = 'active'
             ORDER BY i.id DESC
             """,
             (user_id,),
@@ -425,10 +435,10 @@ def get_other_items_by_category(user_id: int, category: str) -> list[tuple]:
             """
             SELECT i.id, i.user_id, u.username, i.title, i.category, i.condition,
                    i.description, i.estimated_value, i.desired_trade_value,
-                   i.photo_path, i.created_at
+                   i.photo_path, i.created_at, i.status
             FROM items i
             JOIN users u ON i.user_id = u.id
-            WHERE i.user_id != ? AND i.category = ?
+            WHERE i.user_id != ? AND i.category = ? AND i.status = 'active'
             ORDER BY i.id DESC
             """,
             (user_id, category),
@@ -437,6 +447,31 @@ def get_other_items_by_category(user_id: int, category: str) -> list[tuple]:
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+def normalize_listing_status(status: str) -> str:
+    """Keep listing status values constrained to the supported state set."""
+    cleaned = (status or "").strip().lower()
+    return cleaned if cleaned in LISTING_STATUSES else "active"
+
+
+def update_item_status(user_id: int, item_id: int, status: str) -> bool:
+    """Update a listing status for the owning user."""
+    next_status = normalize_listing_status(status)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        UPDATE items
+        SET status = ?
+        WHERE id = ? AND user_id = ?
+        """,
+        (next_status, item_id, user_id),
+    )
+    changed = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return changed
 
 
 # -------------------------------------------------
@@ -733,6 +768,145 @@ def fairness_score(my_value: float, target_value: float) -> tuple[str, float]:
     return label, score
 
 
+def extract_match_keywords(*parts: str) -> set[str]:
+    """Build a small keyword set from listing text for lightweight match scoring."""
+    stop_words = {
+        "the", "and", "for", "with", "this", "that", "from", "your", "item",
+        "trade", "want", "have", "just", "into", "about", "used", "like",
+        "very", "good", "fair", "new", "other", "only", "will", "would",
+        "can", "you", "are", "but", "not", "all", "any", "too", "one",
+    }
+    keywords: set[str] = set()
+    for part in parts:
+        for token in re.findall(r"[a-z0-9]+", (part or "").lower()):
+            if len(token) >= 3 and token not in stop_words:
+                keywords.add(token)
+    return keywords
+
+
+def describe_condition_gap(source_condition: str, target_condition: str) -> str | None:
+    """Explain whether listing conditions feel closely aligned."""
+    condition_rank = {
+        "New": 5,
+        "Like New": 4,
+        "Good": 3,
+        "Used": 2,
+        "Fair": 1,
+    }
+    source_rank = condition_rank.get(source_condition, 0)
+    target_rank = condition_rank.get(target_condition, 0)
+    if source_rank == 0 or target_rank == 0:
+        return None
+
+    gap = abs(source_rank - target_rank)
+    if gap == 0:
+        return f"Condition lines up well at {target_condition.lower()}."
+    if gap == 1:
+        return f"Condition is still close to your {source_condition.lower()} listing."
+    return None
+
+
+def build_trade_match_candidates(user_id: int, my_item: tuple, limit: int = 3) -> list[dict]:
+    """Rank other listings that look like strong barter candidates for one user item."""
+    (
+        my_item_id,
+        my_title,
+        my_category,
+        my_condition,
+        my_description,
+        my_estimated_value,
+        my_desired_trade_value,
+        _my_photo_path,
+        _my_created_at,
+        _my_status,
+    ) = my_item
+    candidates = get_all_other_items(user_id)
+    my_keywords = extract_match_keywords(my_title, my_description, my_category)
+    scored_matches: list[dict] = []
+
+    for candidate in candidates:
+        (
+            candidate_id,
+            owner_id,
+            owner_username,
+            title,
+            category,
+            condition,
+            description,
+            estimated_value,
+            desired_trade_value,
+            photo_path,
+            created_at,
+            _status,
+        ) = candidate
+
+        reasons: list[str] = []
+        total_score = 0.0
+
+        receive_label, receive_score = fairness_score(my_desired_trade_value, estimated_value)
+        give_label, give_score = fairness_score(my_estimated_value, desired_trade_value)
+        average_trade_score = round((receive_score + give_score) / 2, 1)
+        total_score += average_trade_score * 0.45
+
+        if average_trade_score >= 88:
+            reasons.append("Value expectations are closely aligned on both sides.")
+        elif average_trade_score >= 72:
+            reasons.append("Trade value looks reasonably close for a swap.")
+
+        if category == my_category:
+            total_score += 24
+            reasons.append(f"Same category match in {category.lower()}.")
+        elif my_category != "Other" and category != "Other":
+            total_score += 8
+            reasons.append("Different category, but still a possible cross-trade.")
+
+        condition_reason = describe_condition_gap(my_condition, condition)
+        if condition_reason is not None:
+            total_score += 10
+            reasons.append(condition_reason)
+
+        candidate_keywords = extract_match_keywords(title, description, category)
+        shared_keywords = sorted(my_keywords & candidate_keywords)
+        if shared_keywords:
+            keyword_boost = min(18, len(shared_keywords) * 6)
+            total_score += keyword_boost
+            reasons.append(
+                "Shared interest terms: " + ", ".join(shared_keywords[:3]) + "."
+            )
+
+        total_score += max(0, 12 - min(12, abs(my_estimated_value - estimated_value) / 20))
+
+        if not reasons:
+            reasons.append("Overall listing details still suggest a possible barter fit.")
+
+        summary = f"{receive_label} on what you would receive; {give_label.lower()} on what they are seeking."
+        scored_matches.append(
+            {
+                "candidate_id": candidate_id,
+                "owner_id": owner_id,
+                "owner_username": owner_username,
+                "title": title,
+                "category": category,
+                "condition": condition,
+                "description": description or "No description provided.",
+                "estimated_value": estimated_value,
+                "desired_trade_value": desired_trade_value,
+                "photo_path": photo_path,
+                "created_at": created_at,
+                "match_score": round(min(total_score, 99.0), 1),
+                "value_score": average_trade_score,
+                "summary": summary,
+                "reasons": reasons[:3],
+            }
+        )
+
+    scored_matches.sort(
+        key=lambda match: (match["match_score"], match["value_score"], match["estimated_value"]),
+        reverse=True,
+    )
+    return scored_matches[:limit]
+
+
 def store_uploaded_photo(photo_path: str) -> str:
     """Copy an uploaded image into the app uploads folder and return the saved path."""
     if not photo_path:
@@ -780,6 +954,7 @@ class SilkRouteApp(tk.Tk):
         self.current_conversation_id: int | None = None
         self.request_lookup: list[int] = []
         self.conversation_lookup: list[int] = []
+        self.profile_status_lookup: dict[str, tuple[int, str]] = {}
         self.user_agreement_acknowledged = False
         self.interaction_locked = False
         self.lockable_widgets: list[tk.Widget] = []
@@ -2324,7 +2499,7 @@ class SilkRouteApp(tk.Tk):
             return
 
         for item in items:
-            item_id, owner_id, owner_username, title, item_category, condition, description, estimated_value, desired_trade_value, photo_path, created_at = item
+            item_id, owner_id, owner_username, title, item_category, condition, description, estimated_value, desired_trade_value, photo_path, created_at, _status = item
             label, score = fairness_score(estimated_value, desired_trade_value)
 
             block = (
@@ -2773,6 +2948,37 @@ class SilkRouteApp(tk.Tk):
     # -------------------------------------------------
     # Profile screen
     # -------------------------------------------------
+    def sync_profile_status_selection(self, event=None) -> None:
+        """Mirror the selected listing's current status into the status picker."""
+        selection = self.profile_item_combo.get().strip() if hasattr(self, "profile_item_combo") else ""
+        item_meta = self.profile_status_lookup.get(selection)
+        if item_meta is None or not hasattr(self, "profile_status_combo"):
+            return
+        _item_id, current_status = item_meta
+        self.profile_status_combo.set(LISTING_STATUS_LABELS.get(current_status, "Active"))
+
+    def handle_profile_status_update(self) -> None:
+        """Apply a profile listing status change and refresh the profile view."""
+        if self.current_user_id is None:
+            messagebox.showerror("Error", "No user logged in.")
+            return
+
+        selection = self.profile_item_combo.get().strip() if hasattr(self, "profile_item_combo") else ""
+        selected_status_label = self.profile_status_combo.get().strip() if hasattr(self, "profile_status_combo") else ""
+        item_meta = self.profile_status_lookup.get(selection)
+        if item_meta is None:
+            messagebox.showwarning("Select listing", "Choose one of your listings first.")
+            return
+
+        reverse_labels = {label: key for key, label in LISTING_STATUS_LABELS.items()}
+        next_status = reverse_labels.get(selected_status_label, "active")
+        item_id, _current_status = item_meta
+        if update_item_status(self.current_user_id, item_id, next_status):
+            messagebox.showinfo("Listing updated", f"Listing status set to {LISTING_STATUS_LABELS[next_status]}.")
+            self.show_profile_screen()
+        else:
+            messagebox.showerror("Update failed", "Could not update that listing status.")
+
     def show_profile_screen(self) -> None:
         self.clear_screen()
         self.create_background_scene()
@@ -2798,10 +3004,14 @@ class SilkRouteApp(tk.Tk):
         ).pack(anchor="w", padx=20, pady=(18, 8))
 
         user_items = get_user_items(self.current_user_id) if self.current_user_id is not None else []
+        self.profile_status_lookup = {}
+        active_count = sum(1 for item in user_items if item[9] == "active")
+        pending_count = sum(1 for item in user_items if item[9] == "pending_trade")
+        traded_count = sum(1 for item in user_items if item[9] == "traded")
 
         tk.Label(
             top_card,
-            text=f"Active Trade Posts: {len(user_items)}",
+            text=f"Active: {active_count}   Pending Trade: {pending_count}   Traded: {traded_count}",
             bg=BG_PANEL,
             fg=NEON_GREEN,
             font=("Consolas", 12, "bold"),
@@ -2823,6 +3033,48 @@ class SilkRouteApp(tk.Tk):
             font=("Consolas", 18, "bold"),
         ).pack(anchor="w", padx=18, pady=(18, 12))
 
+        if user_items:
+            manager = tk.Frame(listings_card, bg=BG_CARD)
+            manager.pack(fill="x", padx=18, pady=(0, 14))
+
+            tk.Label(
+                manager,
+                text="Listing Status Manager",
+                bg=BG_CARD,
+                fg=NEON_BLUE,
+                font=("Consolas", 11, "bold"),
+            ).grid(row=0, column=0, sticky="w", pady=(0, 8), columnspan=3)
+
+            item_options = [f"#{item[0]} - {item[1]}" for item in user_items]
+            self.profile_status_lookup = {
+                option: (item[0], item[9]) for option, item in zip(item_options, user_items)
+            }
+
+            self.profile_item_combo = ttk.Combobox(manager, state="readonly", values=item_options, width=34)
+            self.profile_item_combo.grid(row=1, column=0, sticky="ew", padx=(0, 12))
+            self.profile_item_combo.set(item_options[0])
+            self.profile_item_combo.bind("<<ComboboxSelected>>", self.sync_profile_status_selection)
+
+            self.profile_status_combo = ttk.Combobox(
+                manager,
+                state="readonly",
+                values=[LISTING_STATUS_LABELS[key] for key in LISTING_STATUSES],
+                width=18,
+            )
+            self.profile_status_combo.grid(row=1, column=1, sticky="ew", padx=(0, 12))
+
+            ttk.Button(
+                manager,
+                text="Update Status",
+                command=self.handle_profile_status_update,
+                style="Secondary.TButton",
+            ).grid(row=1, column=2, sticky="ew")
+
+            manager.columnconfigure(0, weight=2)
+            manager.columnconfigure(1, weight=1)
+            manager.columnconfigure(2, weight=0)
+            self.sync_profile_status_selection()
+
         profile_text = tk.Text(
             listings_card,
             bg=BG_INPUT,
@@ -2842,11 +3094,13 @@ class SilkRouteApp(tk.Tk):
             )
         else:
             for item in user_items:
-                item_id, title, category, condition, description, estimated_value, desired_trade_value, photo_path, created_at = item
+                item_id, title, category, condition, description, estimated_value, desired_trade_value, photo_path, created_at, status = item
                 label, score = fairness_score(estimated_value, desired_trade_value)
+                recommended_matches = build_trade_match_candidates(self.current_user_id, item) if self.current_user_id is not None else []
 
                 block = (
                     f"{title}\n"
+                    f"Status: {LISTING_STATUS_LABELS.get(status, 'Active')}\n"
                     f"Category: {category}\n"
                     f"Condition: {condition}\n"
                     f"Estimated Value: ${estimated_value:,.2f}\n"
@@ -2864,6 +3118,27 @@ class SilkRouteApp(tk.Tk):
                     profile_text.insert("end", "\n")
                 else:
                     profile_text.insert("end", f"Photo: {photo_path or 'No photo uploaded'}\n")
+
+                if recommended_matches:
+                    profile_text.insert("end", "\nRecommended Trade Matches\n")
+                    for index, match in enumerate(recommended_matches, start=1):
+                        reason_text = " ".join(match["reasons"])
+                        profile_text.insert(
+                            "end",
+                            (
+                                f"  {index}. {match['title']} by {match['owner_username']}\n"
+                                f"     Match Score: {match['match_score']}%\n"
+                                f"     Category: {match['category']} | Condition: {match['condition']}\n"
+                                f"     Estimated Value: ${match['estimated_value']:,.2f}\n"
+                                f"     Why it matches: {reason_text}\n"
+                                f"     Trade outlook: {match['summary']}\n"
+                            ),
+                        )
+                else:
+                    profile_text.insert(
+                        "end",
+                        "\nRecommended Trade Matches\n  No strong matches yet. More community listings will improve suggestions.\n",
+                    )
 
                 profile_text.insert("end", f"{'-' * 64}\n")
 

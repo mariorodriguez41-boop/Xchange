@@ -8,7 +8,7 @@
     <section class="panel">
         <div class="section-label">Identity</div>
         <h1 class="section-title">{{ shell_username }}</h1>
-        <p class="hero-copy">Active Trade Posts: {{ listings|length }}</p>
+        <p class="hero-copy">Active Trade Posts: {{ listings|selectattr("status", "equalto", "active")|list|length }}</p>
     </section>
 
     <section class="list-panel">
@@ -23,6 +23,7 @@
                         <div class="listing-content">
                             <h2 class="listing-title">{{ listing.title }}</h2>
                             <div class="listing-meta">
+                                <div>Status: {{ listing.status_label }}</div>
                                 <div>Category: {{ listing.category }}</div>
                                 <div>Condition: {{ listing.condition }}</div>
                                 <div>Estimated Value: ${{ '%.2f'|format(listing.estimated_value) }}</div>
@@ -31,6 +32,18 @@
                                 <div>Created: {{ listing.created_at }}</div>
                             </div>
                             <p class="listing-note">{{ listing.description }}</p>
+                            <form method="post" action="{{ url_for('profile_status') }}" class="status-form">
+                                <input type="hidden" name="item_id" value="{{ listing.id }}">
+                                <div class="field" style="margin: 0; min-width: 220px;">
+                                    <label for="status-{{ listing.id }}">Listing Status</label>
+                                    <select id="status-{{ listing.id }}" name="status">
+                                        {% for status_key in listing_statuses %}
+                                            <option value="{{ status_key }}" {% if status_key == listing.status %}selected{% endif %}>{{ listing_status_labels[status_key] }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <button class="ghost-btn" type="submit">Update Status</button>
+                            </form>
                         </div>
                     </article>
                 {% endfor %}

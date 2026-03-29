@@ -14,6 +14,8 @@ from flask import (
 )
 
 from main import (
+    LISTING_STATUSES,
+    LISTING_STATUS_LABELS,
     LOGO_PATH,
     UPLOADS_DIR,
     approve_message_request,
@@ -32,6 +34,7 @@ from main import (
     init_db,
     mark_conversation_read,
     send_message,
+    update_item_status,
 )
 
 
@@ -106,12 +109,12 @@ def web_price_links(term: str) -> list[tuple[str, str]]:
 def decorate_listing_rows(items: list[tuple]) -> list[dict]:
     listings = []
     for item in items:
-        if len(item) == 9:
-            item_id, title, category, condition, description, estimated_value, desired_trade_value, photo_path, created_at = item
+        if len(item) == 10:
+            item_id, title, category, condition, description, estimated_value, desired_trade_value, photo_path, created_at, status = item
             owner_username = current_username()
             owner_id = current_user_id()
         else:
-            item_id, owner_id, owner_username, title, category, condition, description, estimated_value, desired_trade_value, photo_path, created_at = item
+            item_id, owner_id, owner_username, title, category, condition, description, estimated_value, desired_trade_value, photo_path, created_at, status = item
 
         balance_label, balance_score = fairness_score(estimated_value, desired_trade_value)
         listings.append(
@@ -128,6 +131,8 @@ def decorate_listing_rows(items: list[tuple]) -> list[dict]:
                 "photo_path": photo_path,
                 "photo_url": photo_url(photo_path),
                 "created_at": format_timestamp(created_at),
+                "status": status,
+                "status_label": LISTING_STATUS_LABELS.get(status, "Active"),
                 "balance_label": balance_label,
                 "balance_score": balance_score,
             }
@@ -386,7 +391,28 @@ def inbox():
 @login_required
 def profile():
     listings = decorate_listing_rows(get_user_items(current_user_id()))
-    return render_template("profile.html", listings=listings)
+    return render_template(
+        "profile.html",
+        listings=listings,
+        listing_statuses=LISTING_STATUSES,
+        listing_status_labels=LISTING_STATUS_LABELS,
+    )
+
+
+@app.route("/profile/status", methods=["POST"])
+@login_required
+def profile_status():
+    item_id = request.form.get("item_id", type=int)
+    next_status = request.form.get("status", "").strip().lower()
+    if not item_id or next_status not in LISTING_STATUSES:
+        flash("Choose a valid listing status.", "warning")
+        return redirect(url_for("profile"))
+
+    if update_item_status(current_user_id(), item_id, next_status):
+        flash(f"Listing moved to {LISTING_STATUS_LABELS[next_status]}.", "success")
+    else:
+        flash("Could not update that listing.", "error")
+    return redirect(url_for("profile"))
 
 
 if __name__ == "__main__":
