@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set topbar_title = "CYBER XCHANGE // MAIN HUB" %}
+{% set back_endpoint = None %}
+{% block title %}Cyber Xchange | Main Hub{% endblock %}
+
+{% block content %}
+<section class="hero-shell hub-hero-center">
+    <div class="hero-left">
+        <div class="hero-logo">
+            <img src="{{ url_for('logo_file') }}" alt="Cyber Xchange logo" onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=\'display:grid;place-items:center;width:100%;height:100%;font-size:4rem;font-style:italic;font-weight:800;color:white;\'>CYBER XCHANGE</div>';">
+        </div>
+        <div class="hub-hero-copy">
+            <div class="hero-kicker">Trade, Match, Negotiate</div>
+            <h1 class="hero-title">Welcome back,<br>{{ shell_username }}</h1>
+            <p class="hero-copy">
+                Choose how you want to interact with the trading network. Upload new trade posts, browse categories,
+                check your inbox, or manage your profile and listings.
+            </p>
+        </div>
+    </div>
+
+    {% if not agreement_acknowledged %}
+        <section class="agreement-panel">
+            <div class="agreement-heading">
+                <div class="section-label">User Agreement</div>
+                <form method="post" action="{{ url_for('acknowledge_agreement') }}">
+                    <button class="action-btn" type="submit">Acknowledge</button>
+                </form>
+            </div>
+            <div class="agreement-copy">
+                <p>By creating an account or using CyberXchange, you agree to the user agreement below and all policies on here. If you do not agree, you may not use our services. Thank you.</p>
+                <p><strong>USE AT YOUR OWN RISK!</strong></p>
+                <p>We are not liable for destruction, damage, or theft of your property or anyone else's property once you have traded it.</p>
+                <p>We strongly recommend that meetups for trades be done in public safe spaces like police stations, market squares, and busy walkways.</p>
+                <p>We are not liable for death or injury to you or your trader in any meetups connected to these services.</p>
+                <p>CyberXchange grants you a limited, non-exclusive, non-transferable license to access the Services for your internal business purposes. You may not copy, modify, reverse engineer, or bypass security or usage limits.</p>
+                <p>By trading on this site, you and your trader both agree that you will not be able to return or see your items ever again.</p>
+                <p><strong>Trading Warning System:</strong> by accepting this offer you agree to trade this item forever. No returns. No exceptions.</p>
+            </div>
+        </section>
+    {% endif %}
+</section>
+
+<section class="card-grid" {% if not agreement_acknowledged %}style="opacity:0.45; pointer-events:none;"{% endif %}>
+    <a class="portal-card" href="{{ url_for('upload') }}" style="color: var(--cyan);">
+        <div class="portal-card-top"></div>
+        <div class="portal-card-body">
+            <div class="portal-tag">Enter Portal</div>
+            <div class="portal-title">Upload Trade</div>
+            <div class="portal-copy">Create a new barter listing with photo, condition, estimated value, and desired trade value.</div>
+            <div class="portal-accent"></div>
+        </div>
+    </a>
+    <a class="portal-card" href="{{ url_for('browse') }}" style="color: var(--green);">
+        <div class="portal-card-top"></div>
+        <div class="portal-card-body">
+            <div class="portal-tag">Enter Portal</div>
+            <div class="portal-title">Browse Trades</div>
+            <div class="portal-copy">View other users' postings by category and compare item trade values.</div>
+            <div class="portal-accent"></div>
+        </div>
+    </a>
+    <a class="portal-card" href="{{ url_for('inbox') }}" style="color: var(--pink);">
+        <div class="portal-card-top"></div>
+        <div class="portal-card-body">
+            <div class="portal-tag">Enter Portal</div>
+            <div class="portal-title">Messaging Inbox</div>
+            <div class="portal-copy">Read messages from other traders and keep track of incoming trade interest.</div>
+            <div class="portal-accent"></div>
+        </div>
+    </a>
+    <a class="portal-card" href="{{ url_for('profile') }}" style="color: var(--purple);">
+        <div class="portal-card-top"></div>
+        <div class="portal-card-body">
+            <div class="portal-tag">Enter Portal</div>
+            <div class="portal-title">My Profile</div>
+            <div class="portal-copy">View your current identity in the app and review the trade posts you have uploaded.</div>
+            <div class="portal-accent"></div>
+        </div>
+    </a>
+</section>
+{% endblock %}

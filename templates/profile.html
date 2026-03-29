@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set topbar_title = "MY PROFILE" %}
+{% set back_endpoint = "hub" %}
+{% block title %}Cyber Xchange | Profile{% endblock %}
+
+{% block content %}
+<section class="page-grid" style="margin-top: 28px;">
+    <section class="panel">
+        <div class="section-label">Identity</div>
+        <h1 class="section-title">{{ shell_username }}</h1>
+        <p class="hero-copy">Active Trade Posts: {{ listings|length }}</p>
+    </section>
+
+    <section class="list-panel">
+        <div class="section-label">My Uploaded Listings</div>
+        {% if listings %}
+            <div class="listings-grid">
+                {% for listing in listings %}
+                    <article class="listing-card">
+                        {% if listing.photo_url %}
+                            <img src="{{ listing.photo_url }}" alt="{{ listing.title }}">
+                        {% endif %}
+                        <div class="listing-content">
+                            <h2 class="listing-title">{{ listing.title }}</h2>
+                            <div class="listing-meta">
+                                <div>Category: {{ listing.category }}</div>
+                                <div>Condition: {{ listing.condition }}</div>
+                                <div>Estimated Value: ${{ '%.2f'|format(listing.estimated_value) }}</div>
+                                <div>Desired Trade Value: ${{ '%.2f'|format(listing.desired_trade_value) }}</div>
+                                <div>Trade Balance: {{ listing.balance_label }} ({{ listing.balance_score }}%)</div>
+                                <div>Created: {{ listing.created_at }}</div>
+                            </div>
+                            <p class="listing-note">{{ listing.description }}</p>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">You do not have any uploaded trade listings yet. Use Upload Trade from the main hub to create one.</div>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}

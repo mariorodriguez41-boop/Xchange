@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set topbar_title = "CYBER XCHANGE // ACCESS PORTAL" %}
+{% set back_endpoint = None %}
+{% block title %}Cyber Xchange | Login{% endblock %}
+
+{% block content %}
+<section class="auth-layout">
+    <div class="hero-left">
+        <div class="hero-logo">
+            <img src="{{ url_for('logo_file') }}" alt="Cyber Xchange logo" onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=\'display:grid;place-items:center;width:100%;height:100%;font-size:4rem;font-style:italic;font-weight:800;color:white;\'>CYBER XCHANGE</div>';">
+        </div>
+        <div class="hero-kicker">Interact With The Future Of Trade</div>
+        <h1 class="hero-title">Trade Smarter.<br>Trade Fairer.</h1>
+    </div>
+
+    <section class="auth-panel">
+        <div class="section-label">Signal In To Enter The Market</div>
+        <h2 class="auth-title">Login / Register</h2>
+        <form method="post" class="page-grid">
+            <div class="field">
+                <label for="username">Username</label>
+                <input id="username" name="username" required>
+            </div>
+            <div class="field">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" required>
+            </div>
+            <div class="button-row">
+                <button class="action-btn" type="submit" name="action" value="login">Login</button>
+                <button class="ghost-btn" type="submit" name="action" value="register">Create Account</button>
+            </div>
+        </form>
+    </section>
+</section>
+{% endblock %}

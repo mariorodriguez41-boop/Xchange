@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% set topbar_title = "MESSAGING INBOX" %}
+{% set back_endpoint = "hub" %}
+{% block title %}Cyber Xchange | Inbox{% endblock %}
+
+{% block content %}
+<section class="inbox-layout" style="margin-top: 28px;">
+    <aside class="list-panel">
+        <div class="section-label">Message Requests</div>
+        <div class="sidebar-list">
+            {% if requests %}
+                {% for request_item in requests %}
+                    <div class="request-card">
+                        <strong>{{ request_item[1] }}</strong>
+                        <div class="thread-meta">{{ request_item[2] }}</div>
+                        <div class="thread-meta">{{ request_item[3] }}</div>
+                        <div class="thread-meta">{{ format_timestamp(request_item[4]) }}</div>
+                        <div class="button-row" style="margin-top: 12px;">
+                            <form method="post">
+                                <input type="hidden" name="action" value="approve">
+                                <input type="hidden" name="conversation_id" value="{{ request_item[0] }}">
+                                <button class="action-btn" type="submit">Approve</button>
+                            </form>
+                            <form method="post">
+                                <input type="hidden" name="action" value="decline">
+                                <input type="hidden" name="conversation_id" value="{{ request_item[0] }}">
+                                <button class="danger-btn" type="submit">Decline</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">No pending requests.</div>
+            {% endif %}
+        </div>
+
+        <div class="section-label" style="margin-top: 20px;">Conversations</div>
+        <div class="sidebar-list">
+            {% if conversations %}
+                {% for convo in conversations %}
+                    <a class="conversation-card {% if selected_conversation_id == convo[0] %}active{% endif %}" href="{{ url_for('inbox', conv=convo[0]) }}">
+                        <strong>{{ convo[1] }}</strong>
+                        <div class="thread-meta">{{ convo[2] or "Trade Message" }}</div>
+                        <div class="thread-meta">{{ convo[3][:72] }}{% if convo[3]|length > 72 %}...{% endif %}</div>
+                        <div class="thread-meta">{{ format_timestamp(convo[4]) }}</div>
+                        <div class="thread-meta">{{ convo[5]|upper }}{% if convo[6] %} • {{ convo[6] }} unread{% endif %}</div>
+                    </a>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">No conversations yet.</div>
+            {% endif %}
+        </div>
+    </aside>
+
+    <section class="thread-panel">
+        <div class="section-label">Conversation Thread</div>
+        {% if selected_meta %}
+            <h2 class="auth-title" style="margin-top: 0;">{{ selected_meta[5] }}</h2>
+            <div class="thread-meta" style="margin-bottom: 18px;">
+                Status:
+                {% if selected_meta[1] == "pending" and selected_meta[2] != current_user_id %}
+                    Message request waiting for your approval.
+                {% elif selected_meta[1] == "pending" %}
+                    Request sent. Waiting for them to accept before chatting.
+                {% else %}
+                    Conversation active.
+                {% endif %}
+            </div>
+
+            <div class="message-thread">
+                {% for message in selected_messages %}
+                    <div class="thread-bubble {% if message[1] == current_user_id %}self{% endif %}">
+                        <strong>{{ message[2] }}</strong>
+                        <div class="thread-meta">{{ message[3] }}</div>
+                        <div style="margin-top: 10px;">{{ message[4] }}</div>
+                        <div class="thread-meta" style="margin-top: 10px;">{{ format_timestamp(message[5]) }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <form method="post" class="page-grid" style="margin-top: 18px;">
+                <input type="hidden" name="action" value="reply">
+                <input type="hidden" name="conversation_id" value="{{ selected_meta[0] }}">
+                <div class="field">
+                    <label for="reply_body">Reply</label>
+                    <textarea id="reply_body" name="body" placeholder="Write your message here..."></textarea>
+                </div>
+                <div class="button-row">
+                    <button class="action-btn" type="submit">Send Reply</button>
+                </div>
+            </form>
+        {% else %}
+            <div class="empty-state">No conversation selected.</div>
+        {% endif %}
+    </section>
+
+    <aside class="form-panel">
+        <div class="section-label">Send Message</div>
+        <form method="post" class="page-grid">
+            <input type="hidden" name="action" value="compose">
+            <div class="field">
+                <label for="recipient">Send To</label>
+                <select id="recipient" name="recipient">
+                    {% for user_id, username in users %}
+                        <option value="{{ username }}">{{ username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="subject">Subject</label>
+                <input id="subject" name="subject">
+            </div>
+            <div class="field">
+                <label for="body">Message</label>
+                <textarea id="body" name="body"></textarea>
+            </div>
+            <div class="button-row">
+                <button class="action-btn" type="submit">Send Message</button>
+            </div>
+        </form>
+    </aside>
+</section>
+{% endblock %}

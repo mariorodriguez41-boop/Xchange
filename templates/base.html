@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Cyber Xchange{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='site.css') }}">
+</head>
+<body>
+    <div class="site-shell">
+        {% block topbar %}
+            <header class="topbar">
+                <div class="topbar-inner">
+                    <div class="brand-left">
+                        {% if back_endpoint %}
+                            <a class="nav-btn" href="{{ url_for(back_endpoint) }}">&lt; Back</a>
+                        {% endif %}
+                        <div class="brand-title">{{ topbar_title or "CYBER XCHANGE" }}</div>
+                    </div>
+                    <div class="brand-right">
+                        {% if shell_username %}
+                            <div class="user-chip">USER: {{ shell_username }}</div>
+                            <a class="nav-btn" href="{{ url_for('logout') }}">Logout</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="brand-line"></div>
+            </header>
+        {% endblock %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-stack">
+                    {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% if shell_username %}
+        <div class="floating-search" id="price-search-widget">
+            <button class="action-btn" type="button" onclick="togglePriceSearch()">Price Search</button>
+            <div class="floating-search-panel" id="price-search-panel">
+                <h3 class="floating-title">Market Price Search</h3>
+                <p class="muted-copy">Type an item name and open live market pricing results in your browser.</p>
+                <div class="field">
+                    <label for="global-price-query">Item Name</label>
+                    <input id="global-price-query" type="text" placeholder="Nintendo Switch, road bike, dining table...">
+                </div>
+                <div class="button-row" style="margin-top: 14px;">
+                    <button class="action-btn" type="button" onclick="openMarketSearch()">Open Price Search</button>
+                </div>
+                <div class="market-links" id="global-price-links"></div>
+                <div class="inline-note">Google Shopping opens first, with extra comparison links below.</div>
+            </div>
+        </div>
+    {% endif %}
+
+    <script>
+        function togglePriceSearch() {
+            const widget = document.getElementById("price-search-widget");
+            if (widget) {
+                widget.classList.toggle("open");
+            }
+        }
+
+        function buildMarketLinks(query) {
+            const encoded = encodeURIComponent(query + " new price");
+            return [
+                ["Google Shopping", "https://www.google.com/search?tbm=shop&q=" + encoded],
+                ["Google Search", "https://www.google.com/search?q=" + encoded],
+                ["eBay Search", "https://www.ebay.com/sch/i.html?_nkw=" + encoded],
+            ];
+        }
+
+        function openMarketSearch() {
+            const input = document.getElementById("global-price-query");
+            const linksWrap = document.getElementById("global-price-links");
+            if (!input || !linksWrap) {
+                return;
+            }
+
+            const term = input.value.trim();
+            if (!term) {
+                input.focus();
+                return;
+            }
+
+            const links = buildMarketLinks(term);
+            linksWrap.innerHTML = "";
+            links.forEach(([label, href]) => {
+                const link = document.createElement("a");
+                link.className = "market-link";
+                link.href = href;
+                link.target = "_blank";
+                link.rel = "noreferrer noopener";
+                link.textContent = label;
+                linksWrap.appendChild(link);
+            });
+            window.open(links[0][1], "_blank", "noopener");
+        }
+    </script>
+</body>
+</html>

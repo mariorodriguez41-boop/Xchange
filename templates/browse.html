@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set topbar_title = "BROWSE TRADES" %}
+{% set back_endpoint = "hub" %}
+{% block title %}Cyber Xchange | Browse{% endblock %}
+
+{% block content %}
+<section class="browse-layout" style="margin-top: 28px;">
+    <section class="panel">
+        <div class="section-label">Filter The Network</div>
+        <div class="browse-toolbar">
+            <form method="get" class="browse-toolbar">
+                <div class="field">
+                    <label for="category">Category Filter</label>
+                    <select id="category" name="category">
+                        {% for option in ["All", "Electronics", "Clothing", "Collectibles", "Home", "Tools", "Gaming", "Other"] %}
+                            <option value="{{ option }}" {% if option == selected_category %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="q">Filter Listings</label>
+                    <input id="q" name="q" value="{{ search_term }}" placeholder="Trader, title, notes...">
+                </div>
+                <div class="button-row">
+                    <button class="action-btn" type="submit">Load Category</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="section-label">Market Search</div>
+        <form method="get" class="market-toolbar">
+            <input type="hidden" name="category" value="{{ selected_category }}">
+            <input type="hidden" name="q" value="{{ search_term }}">
+            <div class="field" style="flex: 1 1 320px;">
+                <label for="market_q">Open Live Price Search</label>
+                <input id="market_q" name="market_q" value="{{ market_term }}" placeholder="PlayStation 5, mountain bike, dining set...">
+            </div>
+            <div class="button-row">
+                <button class="action-btn" type="submit">Open Price Search</button>
+            </div>
+        </form>
+        <p class="muted-copy">This opens live market pricing references in your browser and leaves quick links here for comparison.</p>
+        {% if market_links %}
+            <div class="market-links">
+                {% for label, href in market_links %}
+                    <a class="market-link" href="{{ href }}" target="_blank" rel="noreferrer noopener">{{ label }}</a>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="list-panel">
+        <div class="section-label">Live Trade Listings</div>
+        {% if listings %}
+            <div class="listings-grid">
+                {% for listing in listings %}
+                    <article class="listing-card">
+                        {% if listing.photo_url %}
+                            <img src="{{ listing.photo_url }}" alt="{{ listing.title }}">
+                        {% endif %}
+                        <div class="listing-content">
+                            <h2 class="listing-title">{{ listing.title }}</h2>
+                            <div class="listing-meta">
+                                <div>Trader: {{ listing.owner_username }}</div>
+                                <div>Category: {{ listing.category }}</div>
+                                <div>Condition: {{ listing.condition }}</div>
+                                <div>Estimated Value: ${{ '%.2f'|format(listing.estimated_value) }}</div>
+                                <div>Desired Trade Value: ${{ '%.2f'|format(listing.desired_trade_value) }}</div>
+                                <div>Trade Balance: {{ listing.balance_label }} ({{ listing.balance_score }}%)</div>
+                                <div>Created: {{ listing.created_at }}</div>
+                            </div>
+                            <p class="listing-note">{{ listing.description }}</p>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">No trade posts found for this category yet. Try another category or search term.</div>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}

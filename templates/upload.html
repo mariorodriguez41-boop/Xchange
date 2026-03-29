@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% set topbar_title = "UPLOAD TRADE" %}
+{% set back_endpoint = "hub" %}
+{% block title %}Cyber Xchange | Upload Trade{% endblock %}
+
+{% block content %}
+<section class="form-panel" style="margin-top: 28px;">
+    <div class="section-label">Create A Trade Listing</div>
+    <h1 class="section-title">Upload Trade</h1>
+
+    <form method="post" enctype="multipart/form-data" class="form-grid">
+        <div class="page-grid">
+            <div class="field field-full">
+                <label for="title">Item Title</label>
+                <input id="title" name="title" required>
+            </div>
+            <div class="field-grid">
+                <div class="field">
+                    <label for="category">Category</label>
+                    <select id="category" name="category">
+                        <option>Electronics</option>
+                        <option>Clothing</option>
+                        <option>Collectibles</option>
+                        <option>Home</option>
+                        <option>Tools</option>
+                        <option>Gaming</option>
+                        <option selected>Other</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="condition">Condition</label>
+                    <select id="condition" name="condition">
+                        <option>New</option>
+                        <option>Like New</option>
+                        <option selected>Good</option>
+                        <option>Fair</option>
+                        <option>Used</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-grid">
+                <div class="field">
+                    <label for="estimated_value">Estimated Value ($)</label>
+                    <input id="estimated_value" name="estimated_value" required>
+                </div>
+                <div class="field">
+                    <label for="desired_trade_value">Desired Trade Value ($)</label>
+                    <input id="desired_trade_value" name="desired_trade_value" required>
+                </div>
+            </div>
+            <div class="field field-full">
+                <label for="description">Description / Trade Notes</label>
+                <textarea id="description" name="description"></textarea>
+            </div>
+        </div>
+
+        <aside class="preview-panel">
+            <div class="preview-box" id="upload-preview-box">No photo selected</div>
+            <div class="field">
+                <label for="photo">Upload Photo</label>
+                <input id="photo" name="photo" type="file" accept=".png,.jpg,.jpeg,.gif,.webp" onchange="previewUpload(event)">
+            </div>
+            <div class="button-row" style="margin-top: 18px;">
+                <button class="action-btn" type="submit">Save Listing</button>
+            </div>
+        </aside>
+    </form>
+</section>
+
+<script>
+    function previewUpload(event) {
+        const box = document.getElementById("upload-preview-box");
+        const file = event.target.files && event.target.files[0];
+        if (!box || !file) {
+            return;
+        }
+
+        const img = document.createElement("img");
+        img.src = URL.createObjectURL(file);
+        img.onload = () => URL.revokeObjectURL(img.src);
+        box.innerHTML = "";
+        box.appendChild(img);
+    }
+</script>
+{% endblock %}
